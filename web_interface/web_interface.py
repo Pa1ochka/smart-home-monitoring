@@ -1,10 +1,9 @@
 from fastapi import FastAPI
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy import Column, Integer, Float, DateTime
 import redis
-from datetime import datetime, timezone  # Добавляем timezone
+from datetime import datetime, timezone
 from typing import List
 import json
 
@@ -12,7 +11,7 @@ import json
 app = FastAPI(title="Smart Home Monitoring API")
 
 # Настройка базы данных
-DATABASE_URL = "postgresql://postgres:admin12345@localhost:5432/smarthome"
+DATABASE_URL = "postgresql://postgres:admin12345@postgres:5432/smarthome"
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -26,7 +25,7 @@ class SensorData(Base):
     timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 # Настройка Redis
-redis_client = redis.Redis(host='localhost', port=6379, db=0)
+redis_client = redis.Redis(host='redis', port=6379, db=0)
 
 # Модель для ответа API
 from pydantic import BaseModel

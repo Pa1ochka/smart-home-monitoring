@@ -1,21 +1,19 @@
 import pika
 import json
 
-def callback(ch, method, properties, body):
-    notification = json.loads(body)
-    message = notification["message"]
-    print(f"[Уведомление] {message}")
-    # Здесь можно добавить отправку email, push-уведомлений и т.д.
-    ch.basic_ack(delivery_tag=method.delivery_tag)
-
+# Подключение к RabbitMQ и запуск потребителя
 def start_consuming():
-    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    connection = pika.BlockingConnection(pika.ConnectionParameters('rabbitmq'))
     channel = connection.channel()
     channel.queue_declare(queue='notifications', durable=True)
-    channel.basic_qos(prefetch_count=1)
-    channel.basic_consume(queue='notifications', on_message_callback=callback)
+    channel.basic_consume(queue='notifications', on_message_callback=callback, auto_ack=True)
     print("Ожидание уведомлений...")
     channel.start_consuming()
+
+# Callback-функция для обработки уведомлений
+def callback(ch, method, properties, body):
+    notification = json.loads(body)
+    print(f"[Уведомление] {notification['message']}")
 
 if __name__ == "__main__":
     start_consuming()

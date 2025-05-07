@@ -1,15 +1,18 @@
 import pika
 import json
 from sqlalchemy import create_engine, Column, Integer, Float, DateTime
-from sqlalchemy.orm import declarative_base
-from sqlalchemy.orm import sessionmaker
-from datetime import datetime, timezone  # Добавляем timezone
+from sqlalchemy.orm import sessionmaker, declarative_base
+from datetime import datetime, timezone
+import os
+import time
+from sqlalchemy.exc import OperationalError
 
 # Настройка базы данных
-DATABASE_URL = "postgresql://postgres:admin12345@localhost:5432/smarthome"
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+DATABASE_URL = "postgresql://postgres:admin12345@postgres:5432/smarthome"
+
+# Объявляем Base ДО его использования
 Base = declarative_base()
+
 
 # Модель данных для показаний датчиков
 class SensorData(Base):
@@ -17,15 +20,36 @@ class SensorData(Base):
     id = Column(Integer, primary_key=True, index=True)
     temperature = Column(Float, nullable=False)
     humidity = Column(Float, nullable=False)
-    # Исправляем utcnow на now с UTC
     timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
-# Создание таблиц в базе данных
+
+# Функция для ожидания БД
+def wait_for_db():
+    max_attempts = 10
+    attempt = 0
+    engine = create_engine(DATABASE_URL)
+
+    while attempt < max_attempts:
+        try:
+            with engine.connect() as conn:
+                print("Успешное подключение к PostgreSQL")
+                return engine
+        except OperationalError as e:
+            attempt += 1
+            print(f"Попытка {attempt}/{max_attempts}: Ожидание PostgreSQL...")
+            time.sleep(5)
+    raise Exception("Не удалось подключиться к PostgreSQL после 10 попыток")
+
+
+# Инициализация БД
+engine = wait_for_db()
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base.metadata.create_all(bind=engine)
 
 # Пороговые значения
 TEMP_THRESHOLD = {"min": 18.0, "max": 28.0}
 HUMIDITY_THRESHOLD = {"min": 30.0, "max": 70.0}
+
 
 # Callback-функция для обработки сообщений из RabbitMQ
 def callback(ch, method, properties, body):
@@ -49,7 +73,6 @@ def callback(ch, method, properties, body):
         notification = f"Влажность вне диапазона: {humidity}%"
 
     if notification:
-        # Используем переданный канал ch для отправки уведомления
         ch.queue_declare(queue='notifications', durable=True)
         ch.basic_publish(
             exchange='',
@@ -61,15 +84,19 @@ def callback(ch, method, properties, body):
 
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
+
 # Подключение к RabbitMQ и запуск потребителя
 def start_consuming():
-    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    # Используем имя сервиса из docker-compose вместо localhost
+    connection = pika.BlockingConnection(
+        pika.ConnectionParameters('rabbitmq'))
     channel = connection.channel()
     channel.queue_declare(queue='sensor_data', durable=True)
     channel.basic_qos(prefetch_count=1)
     channel.basic_consume(queue='sensor_data', on_message_callback=callback)
     print("Ожидание данных от сенсоров...")
     channel.start_consuming()
+
 
 if __name__ == "__main__":
     start_consuming()
