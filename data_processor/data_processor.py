@@ -3,7 +3,6 @@ import json
 from sqlalchemy import create_engine, Column, Integer, Float, DateTime
 from sqlalchemy.orm import sessionmaker, declarative_base
 from datetime import datetime, timezone
-import os
 import time
 from sqlalchemy.exc import OperationalError
 
@@ -31,10 +30,10 @@ def wait_for_db():
 
     while attempt < max_attempts:
         try:
-            with engine.connect() as conn:
+            with engine.connect():
                 print("Успешное подключение к PostgreSQL")
                 return engine
-        except OperationalError as e:
+        except OperationalError:
             attempt += 1
             print(f"Попытка {attempt}/{max_attempts}: Ожидание PostgreSQL...")
             time.sleep(5)
@@ -67,9 +66,11 @@ def callback(ch, method, properties, body):
 
     # Проверка пороговых значений
     notification = None
-    if temperature < TEMP_THRESHOLD["min"] or temperature > TEMP_THRESHOLD["max"]:
+    if (temperature < TEMP_THRESHOLD["min"] or
+            temperature > TEMP_THRESHOLD["max"]):
         notification = f"Температура вне диапазона: {temperature}°C"
-    elif humidity < HUMIDITY_THRESHOLD["min"] or humidity > HUMIDITY_THRESHOLD["max"]:
+    elif (humidity < HUMIDITY_THRESHOLD["min"] or
+          humidity > HUMIDITY_THRESHOLD["max"]):
         notification = f"Влажность вне диапазона: {humidity}%"
 
     if notification:

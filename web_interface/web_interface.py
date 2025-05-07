@@ -6,6 +6,8 @@ import redis
 from datetime import datetime, timezone
 from typing import List
 import json
+import uvicorn
+from pydantic import BaseModel
 
 # Настройка FastAPI
 app = FastAPI(title="Smart Home Monitoring API")
@@ -16,6 +18,7 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+
 # Модель данных для сенсоров (та же, что в data_processor)
 class SensorData(Base):
     __tablename__ = "sensor_data"
@@ -24,16 +27,18 @@ class SensorData(Base):
     humidity = Column(Float, nullable=False)
     timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
+
 # Настройка Redis
 redis_client = redis.Redis(host='redis', port=6379, db=0)
 
+
 # Модель для ответа API
-from pydantic import BaseModel
 class SensorDataResponse(BaseModel):
     id: int
     temperature: float
     humidity: float
     timestamp: datetime
+
 
 # Эндпоинт для получения последних данных (с кэшированием в Redis)
 @app.get("/latest", response_model=SensorDataResponse)
@@ -45,7 +50,9 @@ async def get_latest_data():
 
     # Получение данных из базы
     db = SessionLocal()
-    latest_data = db.query(SensorData).order_by(SensorData.timestamp.desc()).first()
+    latest_data = (
+        db.query(SensorData).order_by(SensorData.timestamp.desc()).first()
+    )
     db.close()
 
     if latest_data:
@@ -59,14 +66,16 @@ async def get_latest_data():
         return latest_data
     return {"message": "No data available"}
 
+
 # Эндпоинт для получения истории данных
 @app.get("/history", response_model=List[SensorDataResponse])
 async def get_history(limit: int = 10):
     db = SessionLocal()
-    data = db.query(SensorData).order_by(SensorData.timestamp.desc()).limit(limit).all()
+    data = db.query(SensorData).order_by(
+        SensorData.timestamp.desc()).limit(limit).all()
     db.close()
     return data
 
+
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
