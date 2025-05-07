@@ -1,7 +1,7 @@
 import pika
 import json
 from sqlalchemy import create_engine, Column, Integer, Float, DateTime
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 
@@ -22,6 +22,10 @@ class SensorData(Base):
 # Создание таблиц в базе данных
 Base.metadata.create_all(bind=engine)
 
+# Пороговые значения
+TEMP_THRESHOLD = {"min": 18.0, "max": 28.0}
+HUMIDITY_THRESHOLD = {"min": 30.0, "max": 70.0}
+
 # Callback-функция для обработки сообщений из RabbitMQ
 def callback(ch, method, properties, body):
     data = json.loads(body)
@@ -35,6 +39,27 @@ def callback(ch, method, properties, body):
     db.add(sensor_reading)
     db.commit()
     db.close()
+
+    # Проверка пороговых значений
+    notification = None
+    if temperature < TEMP_THRESHOLD["min"] or temperature > TEMP_THRESHOLD["max"]:
+        notification = f"Температура вне диапазона: {temperature}°C"
+    elif humidity < HUMIDITY_THRESHOLD["min"] or humidity > HUMIDITY_THRESHOLD["max"]:
+        notification = f"Влажность вне диапазона: {humidity}%"
+
+    if notification:
+        # Отправка уведомления в очередь
+        connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+        channel = connection.channel()
+        channel.queue_declare(queue='notifications', durable=True)
+        channel.basic_publish(
+            exchange='',
+            routing_key='notifications',
+            body=json.dumps({"message": notification}),
+            properties=pika.BasicProperties(delivery_mode=2)
+        )
+        connection.close()
+        print(f"Отправлено уведомление: {notification}")
 
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
