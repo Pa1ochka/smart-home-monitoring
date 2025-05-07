@@ -4,7 +4,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm import declarative_base
 from sqlalchemy import Column, Integer, Float, DateTime
 import redis
-from datetime import datetime
+from datetime import datetime, timezone  # Добавляем timezone
 from typing import List
 import json
 
@@ -23,7 +23,7 @@ class SensorData(Base):
     id = Column(Integer, primary_key=True, index=True)
     temperature = Column(Float, nullable=False)
     humidity = Column(Float, nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 # Настройка Redis
 redis_client = redis.Redis(host='localhost', port=6379, db=0)

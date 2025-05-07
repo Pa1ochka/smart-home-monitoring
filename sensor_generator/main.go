@@ -15,18 +15,22 @@ type SensorData struct {
 }
 
 func main() {
-    // Подключение к RabbitMQ
-    conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
+    log.Println("Starting sensor generator...")
+
+    // Подключение к RabbitMQ (используем имя сервиса rabbitmq)
+    conn, err := amqp.Dial("amqp://guest:guest@rabbitmq:5672/")
     if err != nil {
         log.Fatalf("Failed to connect to RabbitMQ: %v", err)
     }
     defer conn.Close()
+    log.Println("Connected to RabbitMQ")
 
     ch, err := conn.Channel()
     if err != nil {
         log.Fatalf("Failed to open a channel: %v", err)
     }
     defer ch.Close()
+    log.Println("Channel opened")
 
     // Объявление очереди
     q, err := ch.QueueDeclare(
@@ -40,6 +44,7 @@ func main() {
     if err != nil {
         log.Fatalf("Failed to declare a queue: %v", err)
     }
+    log.Println("Queue declared:", q.Name)
 
     // Инициализация генератора случайных чисел
     rand.Seed(time.Now().UnixNano())

@@ -3,7 +3,7 @@ import json
 from sqlalchemy import create_engine, Column, Integer, Float, DateTime
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
-from datetime import datetime
+from datetime import datetime, timezone  # Добавляем timezone
 
 # Настройка базы данных
 DATABASE_URL = "postgresql://postgres:admin12345@localhost:5432/smarthome"
@@ -17,7 +17,8 @@ class SensorData(Base):
     id = Column(Integer, primary_key=True, index=True)
     temperature = Column(Float, nullable=False)
     humidity = Column(Float, nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    # Исправляем utcnow на now с UTC
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 # Создание таблиц в базе данных
 Base.metadata.create_all(bind=engine)
@@ -48,17 +49,14 @@ def callback(ch, method, properties, body):
         notification = f"Влажность вне диапазона: {humidity}%"
 
     if notification:
-        # Отправка уведомления в очередь
-        connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-        channel = connection.channel()
-        channel.queue_declare(queue='notifications', durable=True)
-        channel.basic_publish(
+        # Используем переданный канал ch для отправки уведомления
+        ch.queue_declare(queue='notifications', durable=True)
+        ch.basic_publish(
             exchange='',
             routing_key='notifications',
             body=json.dumps({"message": notification}),
             properties=pika.BasicProperties(delivery_mode=2)
         )
-        connection.close()
         print(f"Отправлено уведомление: {notification}")
 
     ch.basic_ack(delivery_tag=method.delivery_tag)
