@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: admin12345
-      POSTGRES_DB: smart_home_db
+      POSTGRES_DB: smarthome
     ports:
       - "5432:5432"
     volumes:
@@ -25,6 +25,13 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+
+  sensor_generator:
+    build:
+      context: ./sensor_generator
+      dockerfile: Dockerfile
+    depends_on:
+      - rabbitmq
 
 volumes:
   postgres_data:
