@@ -1,6 +1,6 @@
 import pika
 import json
-from sqlalchemy import create_engine, Column, Integer, Float, DateTime
+from sqlalchemy import create_engine, Column, Integer, Float, DateTime, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 from datetime import datetime, timezone
 import time
@@ -28,7 +28,7 @@ def wait_for_db():
         try:
             engine = create_engine(DATABASE_URL, pool_pre_ping=True)
             with engine.connect() as conn:
-                conn.execute("SELECT 1")  # Простой тестовый запрос
+                conn.execute(text("SELECT 1"))
                 print("Успешное подключение к PostgreSQL")
                 return engine
         except Exception as e:

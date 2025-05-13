@@ -2,15 +2,19 @@ import sys
 import os
 import unittest
 import json
+from unittest.mock import Mock, patch
 from data_processor.data_processor import callback
-from unittest.mock import Mock
 
 # Добавляем корневую директорию проекта в sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-
 class TestDataProcessor(unittest.TestCase):
-    def test_threshold_check_temperature(self):
+    @patch('data_processor.data_processor.SessionLocal')
+    def test_threshold_check_temperature(self, mock_session_local):
+        # Настройка мока для сессии базы данных
+        mock_db = Mock()
+        mock_session_local.return_value = mock_db
+
         # Тест для превышения температуры
         data = {"temperature": 30.0, "humidity": 50.0}
         body = json.dumps(data).encode()
@@ -29,7 +33,12 @@ class TestDataProcessor(unittest.TestCase):
                          "Температура вне диапазона: 30.0°C")
         ch.basic_ack.assert_called_with(delivery_tag=method.delivery_tag)
 
-    def test_threshold_check_humidity(self):
+    @patch('data_processor.data_processor.SessionLocal')
+    def test_threshold_check_humidity(self, mock_session_local):
+        # Настройка мока для сессии базы данных
+        mock_db = Mock()
+        mock_session_local.return_value = mock_db
+
         # Тест для низкой влажности
         data = {"temperature": 22.0, "humidity": 20.0}
         body = json.dumps(data).encode()
@@ -48,7 +57,12 @@ class TestDataProcessor(unittest.TestCase):
                          "Влажность вне диапазона: 20.0%")
         ch.basic_ack.assert_called_with(delivery_tag=method.delivery_tag)
 
-    def test_normal_data(self):
+    @patch('data_processor.data_processor.SessionLocal')
+    def test_normal_data(self, mock_session_local):
+        # Настройка мока для сессии базы данных
+        mock_db = Mock()
+        mock_session_local.return_value = mock_db
+
         # Тест для нормальных данных
         data = {"temperature": 22.0, "humidity": 50.0}
         body = json.dumps(data).encode()
@@ -59,7 +73,6 @@ class TestDataProcessor(unittest.TestCase):
         callback(ch, method, properties, body)
         ch.basic_publish.assert_not_called()  # Уведомление не отправлено
         ch.basic_ack.assert_called_with(delivery_tag=method.delivery_tag)
-
 
 if __name__ == '__main__':
     unittest.main()
