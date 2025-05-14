@@ -3,10 +3,18 @@ import os
 import unittest
 import json
 from unittest.mock import Mock, patch
-from data_processor.data_processor import callback
 
 # Добавляем корневую директорию проекта в sys.path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, project_root)
+print(f"sys.path: {sys.path}")  # Отладочная информация
+
+# Импорт callback из data_processor
+try:
+    from data_processor.data_processor import callback
+except ImportError as e:
+    print(f"Ошибка импорта: {e}")
+    raise
 
 class TestDataProcessor(unittest.TestCase):
     @patch('data_processor.data_processor.SessionLocal')
