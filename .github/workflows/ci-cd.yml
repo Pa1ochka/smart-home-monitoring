@@ -34,7 +34,7 @@ jobs:
       - name: Debug working directory
         run: |
           pwd
-          ls -R $GITHUB_WORKSPACE/smart-home-monitoring
+          ls -R $GITHUB_WORKSPACE
       - name: Install dependencies
         run: |
           cd $GITHUB_WORKSPACE/smart-home-monitoring
