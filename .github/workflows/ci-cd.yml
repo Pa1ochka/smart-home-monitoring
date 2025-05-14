@@ -91,7 +91,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
       rabbitmq:
         image: rabbitmq:3-management
         ports:
@@ -102,7 +101,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
       redis:
         image: redis:latest
         ports:
@@ -112,17 +110,19 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
     steps:
       - uses: actions/checkout@v3
-
+      - name: Install docker-compose
+        run: |
+          sudo curl -L "https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+          docker-compose --version
       - name: Deploy with docker-compose
         run: |
           cd $GITHUB_WORKSPACE
           docker-compose up -d
           sleep 30
           docker ps
-
       - name: Check API availability
         run: |
           curl --retry 3 --retry-delay 5 --retry-max-time 30 http://localhost:8000/latest || exit 1
