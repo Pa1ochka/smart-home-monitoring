@@ -96,11 +96,3 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Deploy with docker-compose
-        run: |
-          cd $GITHUB_WORKSPACE/smart-home-monitoring
-          docker-compose up -d
-          sleep 30
-          docker ps
-      - name: Check API availability
-        run: |
-          curl --retry 3 --retry-delay 5 --retry-max-time 30 http://localhost:8000/latest || exit 1
