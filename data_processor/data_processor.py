@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import time
 
 # Настройка базы данных
-DATABASE_URL = "postgresql://postgres:admin12345@postgres:5432/smarthome"
+DATABASE_URL = "postgresql://postgres:admin12345@localhost:5432/smarthome"
 
 # Объявляем Base ДО его использования
 Base = declarative_base()
