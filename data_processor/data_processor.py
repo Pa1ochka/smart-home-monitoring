@@ -4,13 +4,13 @@ from sqlalchemy import create_engine, Column, Integer, Float, DateTime, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 from datetime import datetime, timezone
 import time
-from sqlalchemy.exc import OperationalError
 
 # Настройка базы данных
 DATABASE_URL = "postgresql://postgres:admin12345@postgres:5432/smarthome"
 
 # Объявляем Base ДО его использования
 Base = declarative_base()
+
 
 # Модель данных для показаний датчиков
 class SensorData(Base):
@@ -19,6 +19,7 @@ class SensorData(Base):
     temperature = Column(Float, nullable=False)
     humidity = Column(Float, nullable=False)
     timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
 
 # Функция для ожидания БД
 def wait_for_db():
@@ -35,7 +36,9 @@ def wait_for_db():
             attempt += 1
             print(f"Попытка {attempt}/{max_attempts}: Ошибка - {str(e)}")
             time.sleep(5)
-    raise Exception(f"Не удалось подключиться к PostgreSQL после {max_attempts} попыток")
+    raise Exception(f"Не удалось подключиться к PostgreSQL "
+                    f"после {max_attempts} попыток")
+
 
 # Инициализация БД
 engine = wait_for_db()
@@ -45,6 +48,7 @@ Base.metadata.create_all(bind=engine)
 # Пороговые значения
 TEMP_THRESHOLD = {"min": 18.0, "max": 28.0}
 HUMIDITY_THRESHOLD = {"min": 30.0, "max": 70.0}
+
 
 # Callback-функция для обработки сообщений из RabbitMQ
 def callback(ch, method, properties, body):
@@ -81,6 +85,7 @@ def callback(ch, method, properties, body):
 
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
+
 # Подключение к RabbitMQ и запуск потребителя
 def start_consuming():
     connection = pika.BlockingConnection(pika.ConnectionParameters('rabbitmq'))
@@ -90,6 +95,7 @@ def start_consuming():
     channel.basic_consume(queue='sensor_data', on_message_callback=callback)
     print("Ожидание данных от сенсоров...")
     channel.start_consuming()
+
 
 if __name__ == "__main__":
     start_consuming()
