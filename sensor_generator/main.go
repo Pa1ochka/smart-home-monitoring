@@ -9,76 +9,77 @@ import (
     "github.com/streadway/amqp"
 )
 
+// SensorData определяет формат данных сенсоров для отправки в RabbitMQ.
 type SensorData struct {
     Temperature float64 `json:"temperature"`
     Humidity    float64 `json:"humidity"`
 }
 
 func main() {
-    log.Println("Starting sensor generator...")
+    log.Println("Запуск генератора данных сенсоров...")
 
-    // Подключение к RabbitMQ (используем имя сервиса rabbitmq)
+    // Установка соединения с RabbitMQ для отправки данных
     conn, err := amqp.Dial("amqp://guest:guest@rabbitmq:5672/")
     if err != nil {
-        log.Fatalf("Failed to connect to RabbitMQ: %v", err)
+        log.Fatalf("Не удалось подключиться к RabbitMQ: %v", err)
     }
     defer conn.Close()
-    log.Println("Connected to RabbitMQ")
+    log.Println("Соединение с RabbitMQ установлено")
 
-    ch, err := conn.Channel()
+    channel, err := conn.Channel()
     if err != nil {
-        log.Fatalf("Failed to open a channel: %v", err)
+        log.Fatalf("Не удалось открыть канал: %v", err)
     }
-    defer ch.Close()
-    log.Println("Channel opened")
+    defer channel.Close()
+    log.Println("Канал для сообщений открыт")
 
-    // Объявление очереди
-    q, err := ch.QueueDeclare(
-        "sensor_data", // Имя очереди
-        true,          // Durable
-        false,         // Delete when unused
-        false,         // Exclusive
-        false,         // No-wait
-        nil,           // Arguments
+    // Настройка устойчивой очереди для данных сенсоров
+    queue, err := channel.QueueDeclare(
+        "sensor_data",
+        true,  // Устойчивая очередь
+        false, // Не удалять
+        false, // Не эксклюзивная
+        false, // Без ожидания
+        nil,   // Без аргументов
     )
     if err != nil {
-        log.Fatalf("Failed to declare a queue: %v", err)
+        log.Fatalf("Не удалось объявить очередь: %v", err)
     }
-    log.Println("Queue declared:", q.Name)
+    log.Println("Очередь готова:", queue.Name)
 
-    // Инициализация генератора случайных чисел
+    // Инициализация генератора случайных чисел для имитации данных
     rand.Seed(time.Now().UnixNano())
 
-    // Генерация и отправка данных
+    // Генерация и отправка данных сенсоров с интервалом
     for {
-        data := SensorData{
+        sensorData := SensorData{
             Temperature: 15.0 + rand.Float64()*15.0, // 15.0–30.0°C
             Humidity:    20.0 + rand.Float64()*60.0, // 20.0–80.0%
         }
 
-        body, err := json.Marshal(data)
+        body, err := json.Marshal(sensorData)
         if err != nil {
-            log.Printf("Failed to marshal JSON: %v", err)
+            log.Printf("Ошибка сериализации данных: %v", err)
+            time.Sleep(10 * time.Second)
             continue
         }
 
-        err = ch.Publish(
-            "",     // Exchange
-            q.Name, // Routing key
-            false,  // Mandatory
-            false,  // Immediate
+        err = channel.Publish(
+            "",         // Обменник
+            queue.Name, // Ключ маршрутизации
+            false,      // Не обязательная доставка
+            false,      // Не немедленная доставка
             amqp.Publishing{
                 ContentType:  "application/json",
                 Body:         body,
                 DeliveryMode: amqp.Persistent,
             })
         if err != nil {
-            log.Printf("Failed to publish message: %v", err)
+            log.Printf("Ошибка отправки данных: %v", err)
         } else {
-            log.Printf("Sent: %+v", data)
+            log.Printf("Отправлены данные: %+v", sensorData)
         }
 
-        // Пауза 5 секунд
-        time.Sleep(5 * time.Second)
+        time.Sleep(10 * time.Second)
     }
 }

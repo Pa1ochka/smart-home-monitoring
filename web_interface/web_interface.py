@@ -1,81 +1,97 @@
-from fastapi import FastAPI
-from sqlalchemy import create_engine
+from fastapi import FastAPI, HTTPException
+from sqlalchemy import create_engine, Column, Integer, Float, DateTime
 from sqlalchemy.orm import sessionmaker, declarative_base
-from sqlalchemy import Column, Integer, Float, DateTime
 import redis
 from datetime import datetime, timezone
 from typing import List
 import json
 import uvicorn
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
-# Настройка FastAPI
+
 app = FastAPI(title="Smart Home Monitoring API")
 
-# Настройка базы данных
+
 DATABASE_URL = "postgresql://postgres:admin12345@postgres:5432/smarthome"
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-
-# Модель данных для сенсоров (та же, что в data_processor)
-class SensorData(Base):
+# Модель для хранения данных сенсоров
+class SensorReading(Base):
     __tablename__ = "sensor_data"
     id = Column(Integer, primary_key=True, index=True)
     temperature = Column(Float, nullable=False)
     humidity = Column(Float, nullable=False)
     timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
-
-# Настройка Redis
-redis_client = redis.Redis(host='redis', port=6379, db=0)
-
-
-# Модель для ответа API
-class SensorDataResponse(BaseModel):
+# Pydantic-модель для сериализации ответов API
+class SensorReadingResponse(BaseModel):
     id: int
     temperature: float
     humidity: float
     timestamp: datetime
 
+    model_config = ConfigDict(from_attributes=True)
 
-# Эндпоинт для получения последних данных (с кэшированием в Redis)
-@app.get("/latest", response_model=SensorDataResponse)
-async def get_latest_data():
-    # Проверка кэша
-    cached_data = redis_client.get("latest_sensor_data")
-    if cached_data:
-        return json.loads(cached_data)
+# Клиент для кэширования последних данных
+cache_client = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
 
-    # Получение данных из базы
-    db = SessionLocal()
-    latest_data = (
-        db.query(SensorData).order_by(SensorData.timestamp.desc()).first()
-    )
-    db.close()
+@app.get("/health")
+async def health_check():
+    """
+    Возвращает статус работоспособности сервиса.
+    """
+    return {"status": "healthy"}
 
-    if latest_data:
-        # Сохранение в кэш
-        redis_client.setex("latest_sensor_data", 60, json.dumps({
-            "id": latest_data.id,
-            "temperature": latest_data.temperature,
-            "humidity": latest_data.humidity,
-            "timestamp": latest_data.timestamp.isoformat()
-        }))
-        return latest_data
-    return {"message": "No data available"}
+@app.get("/latest", response_model=SensorReadingResponse)
+async def get_latest_sensor_reading():
+    """
+    Извлекает последние данные сенсоров из кэша или базы данных.
+    """
+    try:
+        # Попытка получения данных из кэша
+        cached_reading = cache_client.get("latest_sensor_reading")
+        if cached_reading:
+            return SensorReadingResponse(**json.loads(cached_reading))
 
+        # Запрос к базе данных при отсутствии кэша
+        with SessionLocal() as db:
+            latest = db.query(SensorReading).order_by(SensorReading.timestamp.desc()).first()
+            if latest:
+                response = SensorReadingResponse(
+                    id=latest.id,
+                    temperature=latest.temperature,
+                    humidity=latest.humidity,
+                    timestamp=latest.timestamp
+                )
+                # Сохранение данных в кэш
+                redis_data = response.model_dump()
+                redis_data["timestamp"] = redis_data["timestamp"].isoformat()
+                cache_client.setex("latest_sensor_reading", 60, json.dumps(redis_data))
+                return response
+            raise HTTPException(status_code=404, detail="Данные сенсоров отсутствуют")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка: {str(e)}")
 
-# Эндпоинт для получения истории данных
-@app.get("/history", response_model=List[SensorDataResponse])
-async def get_history(limit: int = 10):
-    db = SessionLocal()
-    data = db.query(SensorData).order_by(
-        SensorData.timestamp.desc()).limit(limit).all()
-    db.close()
-    return data
-
+@app.get("/history", response_model=List[SensorReadingResponse])
+async def get_sensor_history(limit: int = 10):
+    """
+    Возвращает последние записи из истории данных сенсоров.
+    """
+    try:
+        with SessionLocal() as db:
+            readings = db.query(SensorReading).order_by(SensorReading.timestamp.desc()).limit(limit).all()
+            return [
+                SensorReadingResponse(
+                    id=r.id,
+                    temperature=r.temperature,
+                    humidity=r.humidity,
+                    timestamp=r.timestamp
+                ) for r in readings
+            ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

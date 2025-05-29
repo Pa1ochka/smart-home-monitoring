@@ -1,10 +1,11 @@
 services:
+  # PostgreSQL для хранения данных сенсоров
   postgres:
     image: postgres:latest
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: admin12345
-      POSTGRES_DB: smarthome  # Уберите init.sql, если используете это
+      POSTGRES_DB: smarthome
     ports:
       - "5432:5432"
     volumes:
@@ -15,11 +16,12 @@ services:
       timeout: 5s
       retries: 10
 
+  # RabbitMQ для обмена сообщениями
   rabbitmq:
     image: rabbitmq:3-management
     ports:
-      - "5672:5672"  # Для AMQP
-      - "15672:15672"  # Для веб-интерфейса управления
+      - "5672:5672"    # Порт AMQP
+      - "15672:15672"  # Веб-интерфейс; ограничить в продакшене
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -28,22 +30,30 @@ services:
       timeout: 5s
       retries: 5
 
+  # Redis для кэширования данных
   redis:
     image: redis:latest
     ports:
-      - "6379:6379"
+      - "6379:6379"  # Для разработки; ограничить в продакшене
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # Генератор данных сенсоров на Go
   sensor_generator:
     build:
-      context: ./sensor_generator
-      dockerfile: Dockerfile
+      context: .  # Корень проекта для доступа к wait-for-it.sh
+      dockerfile: sensor_generator/Dockerfile
     depends_on:
       rabbitmq:
         condition: service_healthy
 
-  python_services:
+  # API для веб-интерфейса
+  smart_home_api:
     build:
       context: .
       dockerfile: Dockerfile
@@ -55,7 +65,45 @@ services:
       redis:
         condition: service_started
     ports:
-      - "8000:8000"  # Для FastAPI
+      - "8000:8000"  # Порт FastAPI
+    volumes:
+      - .:/app  # Для горячей перезагрузки в разработке
+    command: ["sh", "-c", "./wait-for-it.sh postgres:5432 -- ./wait-for-it.sh rabbitmq:5672 -- ./wait-for-it.sh redis:6379 -- python web_interface/web_interface.py"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Сервис обработки данных сенсоров
+  sensor_data_service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - .:/app  # Для горячей перезагрузки
+    command: ["sh", "-c", "./wait-for-it.sh postgres:5432 -- ./wait-for-it.sh rabbitmq:5672 -- python sensor_data/sensor_data.py"]
+    environment:
+      - PYTHONUNBUFFERED=1  # Отключение буферизации
+
+  # Сервис обработки уведомлений
+  notification_service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - .:/app  # Для горячей перезагрузки
+    command: ["sh", "-c", "./wait-for-it.sh rabbitmq:5672 -- python notification_service/notification_service.py"]
+    environment:
+      - PYTHONUNBUFFERED=1  # Отключение буферизации
 
 volumes:
   postgres_data:
